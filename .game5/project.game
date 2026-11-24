@@ -1,0 +1,6 @@
+# vim: set filetype=game:
+# game: barkeep, a strip of the machine's readings beside your terminal
+#
+# name says which project this is. the builder's config has a block for
+# it that says where its road is; this file never names a remote.
+name barkeep

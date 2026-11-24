@@ -1,0 +1,4 @@
+# names the system gives in capitals, written as it writes them: cgo's
+# linker flags, CoreFoundation's string macro, and the signal control-T
+# sends.
+abbreviations LDFLAGS CFSTR SIGINFO

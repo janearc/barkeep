@@ -29,6 +29,39 @@ func TestARenderIsReadAsItsThreeRows(t *testing.T) {
 	}
 }
 
+func TestRenderNameFollowsTheProgressFreshness(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	for _, each := range []struct{ words, want string }{
+		{fmt.Sprintf("0 1 0 -1 %d\nbay", now.Unix()), "bay"},
+		{fmt.Sprintf("0 1 0 -1 %d", now.Unix()), none},
+		{fmt.Sprintf("0 1 0 -1 %d\nbay", now.Unix()-121), none},
+		{fmt.Sprintf("bad 1 0 -1 %d\nbay", now.Unix()), unknown},
+	} {
+		if got := renderName(progress(t, each.words), now); got != each.want {
+			t.Errorf("%q: got %q, want %q", each.words, got, each.want)
+		}
+	}
+}
+
+func TestGoCacheDir(t *testing.T) {
+	t.Setenv("GOCACHE", "/tmp/example-go-cache")
+	if got := goCacheDir(); got != "/tmp/example-go-cache" {
+		t.Fatal(got)
+	}
+	t.Setenv("GOCACHE", "off")
+	if got := goCacheDir(); got != "" {
+		t.Fatalf("off: %q", got)
+	}
+	t.Setenv("GOCACHE", "")
+	base, err := os.UserCacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := goCacheDir(); got != filepath.Join(base, "go-build") {
+		t.Fatal(got)
+	}
+}
+
 // A watcher that cannot yet say how long is left writes -1 there, and
 // only there: the share and the rate are still read.
 func TestATimeLeftNotYetKnownIsAQuestionMark(t *testing.T) {

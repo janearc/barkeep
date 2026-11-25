@@ -92,7 +92,8 @@ func stripFlags() []pzm.Flag {
 		pzm.Value("turn", verb.NoShort,
 			"how long a lamp stays one colourway before the next"),
 		pzm.Value("render", verb.NoShort,
-			"a render watcher's progress file, for its three rows"),
+			"a render watcher's progress file, including"+
+				"an optional job name"),
 		pzm.Switch("hounds", verb.NoShort,
 			"open with the hounds over a lava lamp, not the rain"),
 		pzm.Switch("show", verb.NoShort,
@@ -110,7 +111,11 @@ var stripPage = `# strip
 
 draws the machine's readings down this pane, one to a row, over a slow
 loop of colour: the load, the gpu, memory and its trend, swap, the disk,
-the Trash, and a render's progress when --render names its file.
+the Trash, the Go build cache, and a render's name and progress when
+--render names its file. The Go cache follows GOCACHE or the default
+user cache directory; its allocated disk space is measured in the
+background every five minutes. A progress file may carry a job name on
+its second line; older one-line files remain valid.
 
 it is made for a narrow pane beside your work, thirteen cells or so. name
 other terminals after the flags and it draws the same strip in each, from

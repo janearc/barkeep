@@ -67,11 +67,11 @@ func TestARowsCellsHoldItsLettersAndHalfBlocksBetween(t *testing.T) {
 }
 
 // The strip has one row for each reading, in its order, and the rule
-// under them: eleven rows where there were twenty-one.
+// under them.
 func TestEveryReadingHasOneRowAndTheRuleIsLast(t *testing.T) {
 	lines := status(time.Now())
 	names := []string{"cpu", "gpu", "mem", "mpres", "swap", "disk",
-		"trash", "rndr", "f/m", "eta"}
+		"trash", "gocache", "job", "rndr", "f/m", "eta"}
 	if len(lines) != len(names)+1 {
 		t.Fatalf("the strip has %d rows; want %d", len(lines), len(names)+1)
 	}

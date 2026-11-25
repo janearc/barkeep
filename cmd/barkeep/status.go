@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"golang.org/x/sys/unix"
 )
@@ -37,10 +38,14 @@ const (
 	renderStale = 120 * time.Second
 )
 
-// renderPath is the small file a render's watcher keeps, the -render
-// flag: one line of five whole numbers, "done total frames_per_minute
-// eta_seconds epoch", written whole (a temporary file renamed into
-// place). Empty, no render is watched and its three rows are a dash.
+// renderPath is the path to the render progress file (passed via -render),
+// updated atomically via temp-file rename. When empty, render watching is
+// disabled and render columns display "-".
+//
+// File format:
+//
+//	Line 1: "<done> <total> <frames_per_minute> <eta_seconds> <epoch>"
+//	Line 2: optional job name
 var renderPath string
 
 // The kernel's memory pressure levels.
@@ -60,8 +65,8 @@ type line struct {
 
 // status is the readings as the strip's lines, top to bottom, each a
 // name with its reading beside it on one row: cpu, gpu, mem, mpres,
-// swap, disk and trash; then a render's progress, throughput and time
-// left, rndr, f/m and eta, a dash each when nothing renders.
+// swap, disk, trash and Go build cache; then a job name, its progress,
+// throughput and time left, a dash each when nothing renders.
 //
 // A rule is under them. Every reading always has its row, so nothing
 // under one ever moves.
@@ -70,10 +75,18 @@ func status(now time.Time) []line {
 	share, rate, left := render(renderPath, now)
 	lines := []line{}
 	for _, each := range [][2]string{
-		{"cpu", load()}, {"gpu", gpu(now)}, {"mem", memory},
-		{"mpres", trend}, {"swap", swap()}, {"disk", disk()},
+		{"cpu", load()},
+		{"gpu", gpu(now)},
+		{"mem", memory},
+		{"mpres", trend},
+		{"swap", swap()},
+		{"disk", disk()},
 		{"trash", trash(now)},
-		{"rndr", share}, {"f/m", rate}, {"eta", left},
+		{"gocache", goCache(now)},
+		{"job", renderName(renderPath, now)},
+		{"rndr", share},
+		{"f/m", rate},
+		{"eta", left},
 	} {
 		lines = append(lines, line{name: each[0], reading: each[1]})
 	}
@@ -127,8 +140,10 @@ func memoryLines(now time.Time) (memory, trend string) {
 	mark := "?"
 	level, err := unix.SysctlUint32("kern.memorystatus_vm_pressure_level")
 	if err == nil {
-		mark = map[uint32]string{pressureNormal: "", pressureWarn: "!",
-			pressureCritical: "!!"}[level]
+		mark = map[uint32]string{
+			pressureNormal: "", pressureWarn: "!",
+			pressureCritical: "!!",
+		}[level]
 		if level != pressureNormal && mark == "" {
 			mark = "?"
 		}
@@ -186,6 +201,48 @@ func trash(now time.Time) string {
 	return gigabytes(bytes)
 }
 
+// goCache returns the size of the go cache despite its confusing name
+func goCache(now time.Time) string {
+	dir := goCacheDir()
+	if dir == "" {
+		return unknown
+	}
+	bytes, known := goCached.size(now, dir)
+	if !known {
+		return unknown
+	}
+	return gigabytes(bytes)
+}
+
+// renderName uses the optional second line of the progress file.
+// The same freshness and validity rules apply to both name and progress.
+func renderName(path string, now time.Time) string {
+	fields, name := renderFile(path)
+	share, _, _ := renderFields(fields, now)
+	if share == none || share == unknown {
+		return share
+	}
+	if name == "" {
+		return none
+	}
+	name = strings.Map(func(r rune) rune {
+		if !unicode.IsPrint(r) {
+			return -1
+		}
+		return r
+	}, name)
+	if name == "" {
+		return none
+	}
+	letters := []rune(name)
+	if len(letters) <= 10 {
+		return name
+	}
+	loop := []rune(name + "   ")
+	start := int((now.Unix() / 2) % int64(len(loop)))
+	return string(append(loop[start:], loop[:start]...))
+}
+
 // gigabytes is so many bytes as whole gigabytes, rounded, or a dash
 // when that rounds to none.
 func gigabytes(bytes int64) string {
@@ -206,7 +263,20 @@ const none = "-"
 // With no file, or one its watcher has stopped keeping, all three are a
 // dash. A file that cannot be understood is "?", never a number.
 func render(path string, now time.Time) (share, rate, left string) {
-	fields := fieldsOf(path)
+	fields, _ := renderFile(path)
+	return renderFields(fields, now)
+}
+
+// renderFields formats the first five whitespace-separated fields from the
+// render progress file relative to now into display strings for completion
+// percentage (capped at 100%), frames per minute, and remaining time.
+//
+// Expected field layout: <done> <total> <frames_per_minute> <eta_seconds>
+// <epoch>. Non-negative integers are required except eta_seconds, which may be
+// -1 when ETA is unavailable. Returns none for empty fields or stale updates
+// (older than renderStale), and unknown for malformed input, fewer than five
+// fields, or a zero total.
+func renderFields(fields []string, now time.Time) (share, rate, left string) {
 	if len(fields) == 0 {
 		return none, none, none
 	}
@@ -255,20 +325,19 @@ func timeLeft(seconds int64) string {
 	return fmt.Sprintf("%dd", seconds/86400)
 }
 
-// fieldsOf is the words of a small file's first line, or none when it
-// cannot be read. The file is opened by its name inside its own folder
-// and nowhere else, so a name that is a link out of the folder is not
-// followed.
-func fieldsOf(path string) []string {
+// renderFile reads the progress numbers and optional name together. The
+// file is opened inside its own folder so a link out is not followed.
+func renderFile(path string) ([]string, string) {
 	folder, err := os.OpenRoot(filepath.Dir(path))
 	if err != nil {
-		return nil
+		return nil, ""
 	}
 	defer folder.Close()
 	written, err := folder.ReadFile(filepath.Base(path))
 	if err != nil {
-		return nil
+		return nil, ""
 	}
-	first, _, _ := strings.Cut(string(written), "\n")
-	return strings.Fields(first)
+	first, rest, _ := strings.Cut(string(written), "\n")
+	name, _, _ := strings.Cut(rest, "\n")
+	return strings.Fields(first), strings.TrimSpace(name)
 }

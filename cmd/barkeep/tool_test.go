@@ -29,7 +29,7 @@ func said(words ...string) (string, int) {
 // The strip, printed once: each reading's name down the left, one to a
 // row, the rule under them, and the loop alone under the rule.
 func Example_strip() {
-	shown, code := said("strip", "--once", "--columns", "15", "--rows", "12")
+	shown, code := said("strip", "--once", "--columns", "15", "--rows", "14")
 	for _, row := range strings.Split(strings.TrimSpace(plain(shown)), "\n") {
 		names := strings.FieldsFunc(row, func(cell rune) bool {
 			return cell == halfBlock
@@ -45,6 +45,8 @@ func Example_strip() {
 	// swap
 	// disk
 	// trash
+	// gocache
+	// job
 	// rndr
 	// f/m
 	// eta

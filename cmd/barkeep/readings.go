@@ -80,6 +80,24 @@ type measure struct {
 // trashed is the Trash's size.
 var trashed measure
 
+// goCached is the Go build cache's last measured disk usage.
+var goCached measure
+
+// goCacheDir follows Go's GOCACHE override and its default cache folder.
+func goCacheDir() string {
+	if dir := os.Getenv("GOCACHE"); dir != "" {
+		if filepath.IsAbs(dir) {
+			return dir
+		}
+		return ""
+	}
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "go-build")
+}
+
 // size is the folder's size as last measured, and whether it has been
 // measured and could be read. Asked when the last walk began longer ago
 // than trashEvery, or never, it starts another.

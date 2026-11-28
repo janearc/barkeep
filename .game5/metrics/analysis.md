@@ -1,4 +1,4 @@
-written by `game signature` and committed. taken at ad9dc80-dirty.
+written by `game signature` and committed. taken at 82f3fa2.
 
 # signature
 
@@ -6,24 +6,24 @@ written by `game signature` and committed. taken at ad9dc80-dirty.
 
 | directory | go | test | ratio | other | files |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| . | 0 | 0 | - | 203 | 7 |
+| . | 0 | 0 | - | 204 | 7 |
 | .game5 | 0 | 0 | - | 6 | 1 |
 | .game5/excludes | 0 | 0 | - | 4 | 1 |
-| .game5/lint | 0 | 0 | - | 14 | 2 |
+| .game5/lint | 0 | 0 | - | 15 | 2 |
 | assets | 0 | 0 | - | 0 | 1 |
-| cmd/barkeep | 3207 | 1350 | 0.4 | 0 | 28 |
-| total | 3207 | 1350 | 0.4 | 227 | 40 |
+| cmd/barkeep | 3564 | 1447 | 0.4 | 0 | 30 |
+| total | 3564 | 1447 | 0.4 | 229 | 42 |
 
 ## by language
 
 | language | files | lines |
 | --- | ---: | ---: |
-| go | 17 | 3207 |
-| go test | 11 | 1350 |
+| go | 18 | 3564 |
+| go test | 12 | 1447 |
 | markdown | 1 | 49 |
 | shell | 2 | 87 |
-| game | 4 | 24 |
-| other | 5 | 67 |
+| game | 4 | 25 |
+| other | 5 | 68 |
 
 ## go tests against go
 
@@ -39,6 +39,6 @@ more             0
 
 ## totals
 
-lines     go 3207, go test 1350, everything 4784
-files     40
+lines     go 3564, go test 1447, everything 5240
+files     42
 packages  1

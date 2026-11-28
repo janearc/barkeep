@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -72,12 +73,13 @@ type written struct {
 	lines []line
 	ink   lamps
 	read  time.Time
+	game  *gameBoard
+	age   time.Duration
 }
 
 // column draws the loop down every strip, the same picture in each,
 // turning slowly, until it is told to stop: its own pane, and the pane
-// of every terminal named. One process draws them all and starts no
-// other.
+// of every terminal named. The optional Game poll runs off the draw loop.
 //
 // It opens with the rain, plays it again on SIGUSR1, and plays the lava
 // lamp on SIGUSR2, and the hounds over a lava lamp on SIGINFO. Started
@@ -87,7 +89,7 @@ type written struct {
 // is drawn the next time. A strip whose pane has gone is left out from
 // then on, and with none left it ends.
 func column(round wheel, set knobs, fps int, ink lamps,
-	others []string) error {
+	others []string, game string) error {
 	if err := syscall.SetNonblock(syscall.Stdout, true); err != nil {
 		return err
 	}
@@ -110,6 +112,14 @@ func column(round wheel, set knobs, fps int, ink lamps,
 	defer restore()
 	began := time.Now()
 	shown, on := written{ink: ink}, stage{ink: ink}
+	var boards <-chan gameBoard
+	board := gameBoard{}
+	if game != "" && banner == nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		boards = watchGame(ctx, game)
+		shown.game = &board
+	}
 	on.put(rain(uint64(began.UnixNano())), began)
 	if houndsFirst {
 		on.light(on.burning.after(began, true, len(inPlay)))
@@ -129,6 +139,7 @@ func column(round wheel, set knobs, fps int, ink lamps,
 				return nil
 			}
 			on.press(asked, time.Now())
+		case board = <-boards:
 		case <-again:
 			now := time.Now()
 			on.put(rain(uint64(now.UnixNano())), now)
@@ -148,8 +159,8 @@ func column(round wheel, set knobs, fps int, ink lamps,
 			if banner == nil && now.Sub(shown.read) >= readEvery {
 				shown.lines, shown.read = status(now), now
 			}
-			at := moment{round, set.span,
-				now.Sub(began).Seconds() * set.speed}
+			shown.age = now.Sub(began)
+			at := moment{round, set.span, shown.age.Seconds() * set.speed}
 			over := on.playing.at(now)
 			if left := drawAll(strips, at, shown, over); left == 0 {
 				return errors.New("every strip's pane has gone")
@@ -265,14 +276,19 @@ func cellsAt(size [2]int, now moment, shown written) [][]cell {
 func loopAt(size [2]int, now moment, shown written) [][]cell {
 	cells := make([][]cell, size[1])
 	samples := float64(size[1] * 2)
+	lines := shown.lines
+	if shown.game != nil {
+		game := shown.game.gameLines(size[0], size[1]-len(lines), shown.age)
+		lines = append(lines, game...)
+	}
 	for row := range cells {
 		upper := at(now.round.colours,
 			float64(row*2)/samples/now.span+now.turned)
 		lower := at(now.round.colours,
 			float64(row*2+1)/samples/now.span+now.turned)
 		said := line{}
-		if at := row - firstLine; at >= 0 && at < len(shown.lines) {
-			said = shown.lines[at]
+		if at := row - firstLine; at >= 0 && at < len(lines) {
+			said = lines[at]
 		}
 		cells[row] = rowOf(size[0], upper, lower, said, shown.ink)
 	}

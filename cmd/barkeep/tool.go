@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -80,7 +81,7 @@ func sized() []pzm.Flag {
 }
 
 // stripFlags are the strip's own flags: what plays over the loop, and
-// the one file it reads.
+// the feeds it reads.
 func stripFlags() []pzm.Flag {
 	return append(sized(),
 		pzm.Value("scramble", verb.NoShort,
@@ -94,6 +95,8 @@ func stripFlags() []pzm.Flag {
 		pzm.Value("render", verb.NoShort,
 			"a render watcher's progress file, including"+
 				"an optional job name"),
+		pzm.Value("game", verb.NoShort,
+			"a Game executable to ask for its lane and queue status"),
 		pzm.Switch("hounds", verb.NoShort,
 			"open with the hounds over a lava lamp, not the rain"),
 		pzm.Switch("show", verb.NoShort,
@@ -117,6 +120,11 @@ user cache directory; its allocated disk space is measured in the
 background every five minutes. A progress file may carry a job name on
 its second line; older one-line files remain valid.
 
+--game PATH adds Game's running, queued, open and maximum counts for each
+queue. Job rows use m/t/g for mutants/tests/gpu, > for running and + for
+waiting, with the PID at the right. When jobs exceed the available rows,
+they cycle through pages. A question mark means Game could not be read.
+
 it is made for a narrow pane beside your work, thirteen cells or so. name
 other terminals after the flags and it draws the same strip in each, from
 this one process. it runs until it is stopped.
@@ -138,8 +146,8 @@ the colourways are:
 
 ` + wayList + `.
 
-it reads the kernel, the I/O registry and the Trash's sizes. it starts no
-other process and writes no file.`
+it reads the kernel, the I/O registry and the Trash's sizes. with --game,
+it also runs the named executable's lanes verb periodically.`
 
 const rampsPage = `# ramps
 
@@ -302,18 +310,26 @@ func stripVerb(call pzm.Call) error {
 		inPlay = asked
 	}
 	renderPath = call.Value("render")
+	game := call.Value("game")
+	if call.Given("game") && game == "" {
+		return fmt.Errorf("--game wants a Game executable")
+	}
 	houndsFirst, showing = call.On("hounds"), call.On("show")
 	if err := bannered(call); err != nil {
 		return err
 	}
 	if !call.On("once") {
 		return column(made.round, made.set, made.fps, made.ink,
-			call.Args())
+			call.Args(), game)
 	}
 	if err := sizeOfFrame(call); err != nil {
 		return err
 	}
-	return printed(call.Out(), made, time.Now())
+	frameSize := size
+	if game != "" && banner == nil && !call.Given("rows") {
+		frameSize[1] = max(frameSize[1], 24)
+	}
+	return printed(call.Out(), made, time.Now(), game, frameSize)
 }
 
 // bannered makes the banner's letters when --banner gives it words, in
@@ -333,10 +349,15 @@ func bannered(call pzm.Call) error {
 
 // printed prints one frame of the strip as it is now, with nothing
 // playing over it, a row to a line.
-func printed(out io.Writer, made setup, now time.Time) error {
+func printed(out io.Writer, made setup, now time.Time, game string,
+	frameSize [2]int) error {
 	shown := written{lines: status(now), ink: made.ink, read: now}
+	if game != "" && banner == nil {
+		board := readGame(context.Background(), game)
+		shown.game = &board
+	}
 	at := moment{round: made.round, span: made.set.span}
-	for _, row := range pictured(size, at, shown, overlay{}) {
+	for _, row := range pictured(frameSize, at, shown, overlay{}) {
 		if _, err := fmt.Fprintln(out, row+"\x1b[0m"); err != nil {
 			return err
 		}
